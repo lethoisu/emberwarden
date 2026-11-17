@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberwarden — Defend the Last Ember Tree</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🔥 EMBERWARDEN</div>
+  <div class="hud">
+    <span class="stat">🪙 <b id="hud-gold">100</b></span>
+    <span class="stat">❤️ <b id="hud-lives">20</b></span>
+    <span class="stat">⭐ <b id="hud-score">0</b></span>
+    <span class="stat">🌊 Wave <b id="hud-wave">—</b></span>
+    <span class="stat">💀 <b id="hud-kills">0</b></span>
+  </div>
+  <div class="controls">
+    <button id="btn-begin" class="primary">Begin the Watch</button>
+    <button id="btn-wave" class="primary">▶ Start Wave 1</button>
+    <button id="btn-speed">Speed 1×</button>
+    <button id="btn-pause">Pause</button>
+    <button id="btn-mute">🔊 Sound</button>
+  </div>
+</header>
+<main class="layout">
+  <div class="stage">
+    <canvas id="game" aria-label="Emberwarden: build wardens on the stone plots to stop the Gloom reaching the Ember Tree"></canvas>
+    <p id="toast" class="toast">Click a stone plot beside the path, then pick a warden to build.</p>
+  </div>
+  <aside id="panel" class="panel" aria-label="Build panel"></aside>
+</main>
+<p id="status" class="sr-only" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
