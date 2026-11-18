@@ -25,6 +25,7 @@ export const PLOTS = [
   { x: 300, y: 375 }, { x: 430, y: 375 }, { x: 560, y: 375 },
   { x: 665, y: 380 }, { x: 815, y: 380 },
   { x: 700, y: 545 },
+  { x: 120, y: 375 }, { x: 815, y: 545 },
 ];
 export const PLOT_R = 24;
 
@@ -84,8 +85,36 @@ export const TOWERS = {
       { damage: 88, rate: 0.65, range: 150, splash: 76, upgradeCost: 0 },
     ],
   },
+  volt: {
+    key: 'volt',
+    name: 'Volt Bloom',
+    short: 'Volt',
+    desc: 'Chain lightning that arcs to nearby foes. Counters swarms.',
+    color: '#ffe14d',
+    glow: '#e8b90a',
+    cost: 90,
+    levels: [
+      { damage: 10, rate: 1.1, range: 118, chain: 2, upgradeCost: 70 },
+      { damage: 17, rate: 1.25, range: 126, chain: 3, upgradeCost: 105 },
+      { damage: 28, rate: 1.5, range: 136, chain: 4, upgradeCost: 0 },
+    ],
+  },
+  dawn: {
+    key: 'dawn',
+    name: 'Dawnspire',
+    short: 'Dawn',
+    desc: 'A long-range lance of dawnlight. Huge hits — boss and Husk killer.',
+    color: '#ff9de2',
+    glow: '#e0569b',
+    cost: 120,
+    levels: [
+      { damage: 55, rate: 0.45, range: 178, upgradeCost: 95 },
+      { damage: 100, rate: 0.5, range: 190, upgradeCost: 150 },
+      { damage: 170, rate: 0.6, range: 205, upgradeCost: 0 },
+    ],
+  },
 };
-export const TOWER_ORDER = ['spark', 'frost', 'thorn'];
+export const TOWER_ORDER = ['spark', 'frost', 'thorn', 'volt', 'dawn'];
 
 // Enemy types. hpMul grows with the wave; speed is px/s on the path.
 export const ENEMIES = {
@@ -109,28 +138,48 @@ export const ENEMIES = {
     hp: 85, speed: 46, bounty: 13, lives: 2, radius: 12,
     color: '#3d4b66', glow: '#1c2438', slowImmune: true,
   },
+  swarm: {
+    key: 'swarm', name: 'Emberling',
+    hp: 14, speed: 82, bounty: 3, lives: 1, radius: 7,
+    color: '#ffb03a', glow: '#d97b06',
+  },
+  wraith: {
+    key: 'wraith', name: 'Wraith',
+    hp: 110, speed: 38, bounty: 15, lives: 1, radius: 13,
+    color: '#a8e6cf', glow: '#3fae8a', regenPct: 0.03,
+  },
   matriarch: {
     key: 'matriarch', name: 'Gloom Matriarch',
     hp: 1200, speed: 23, bounty: 160, lives: 5, radius: 26,
-    color: '#c9a0ff', glow: '#7b2ff7',
+    color: '#c9a0ff', glow: '#7b2ff7', enrageBelow: 0.5,
   },
 };
 
 // Wave list: [enemyKey, count] groups, spawned in order, interval seconds
 // between spawns. Enemy hp scales by 1 + 0.16 * (wave - 1).
+// From wave 4 on, every 7th spawn is an ELITE (see enemies.js): tougher,
+// worth double bounty. Wave 5 brings the first Wraiths; wave 10 is the boss.
 export const WAVES = [
   { groups: [['mote', 8]], interval: 0.9 },
-  { groups: [['mote', 12]], interval: 0.8 },
+  { groups: [['swarm', 10], ['mote', 8]], interval: 0.55 },
   { groups: [['mote', 8], ['husk', 4]], interval: 0.75 },
-  { groups: [['wisp', 10], ['mote', 6]], interval: 0.7 },
-  { groups: [['husk', 8], ['wisp', 8]], interval: 0.65 },
-  { groups: [['shade', 6], ['mote', 10]], interval: 0.65 },
+  { groups: [['wisp', 10], ['swarm', 12]], interval: 0.55 },
+  { groups: [['wraith', 5], ['husk', 6], ['mote', 8]], interval: 0.65 },
+  { groups: [['shade', 6], ['swarm', 14], ['wisp', 6]], interval: 0.55 },
   { groups: [['husk', 12], ['wisp', 8], ['shade', 4]], interval: 0.6 },
-  { groups: [['wisp', 16], ['shade', 8]], interval: 0.55 },
-  { groups: [['husk', 10], ['shade', 10], ['wisp', 10]], interval: 0.55 },
-  { groups: [['matriarch', 1], ['mote', 8], ['wisp', 6]], interval: 0.6 },
+  { groups: [['wraith', 8], ['wisp', 16], ['shade', 8]], interval: 0.55 },
+  { groups: [['husk', 10], ['shade', 10], ['wisp', 10], ['swarm', 12]], interval: 0.5 },
+  { groups: [['matriarch', 1], ['wraith', 4], ['swarm', 10]], interval: 0.6 },
 ];
-export const HP_PER_WAVE = 0.22;
+export const HP_PER_WAVE = 0.25;
+
+// Ember Surge: the warden's active ability. Once per wave, a burst of
+// dawnlight strikes every creature on the path. It is free — the cost is
+// the timing: spend it early on a swarm, or save it for the boss.
+export const SURGE = { damageBase: 45, damagePerWave: 6, usesPerWave: 1 };
+
+// Victory stars: 3 stars with 15+ lives left, 2 with 8+, else 1.
+export const STAR_LIVES = { three: 15, two: 8 };
 
 export const PALETTE = {
   skyTop: '#1b1740',

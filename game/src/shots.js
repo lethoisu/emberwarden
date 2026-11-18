@@ -38,15 +38,15 @@ export function applyShot(game, params) {
   if (shot === 'play') {
     game.startGame();
     placeSet(game, [
-      [0, 'spark'], [4, 'spark'], [6, 'frost'], [8, 'thorn'], [11, 'spark'],
+      [0, 'spark'], [4, 'spark'], [6, 'frost'], [8, 'thorn'], [11, 'volt'],
     ]);
     // Clear wave 1, then catch wave 2 mid-flow so the shot shows live
-    // combat: enemies on the path, projectiles in the air.
+    // combat: Emberlings and motes on the path, projectiles in the air.
     game.startWave(); // wave 1
     fastForward(game, 20);
     if (game.state === 'build') {
-      game.startWave(); // wave 2
-      fastForward(game, 6.5);
+      game.startWave(); // wave 2 (Emberling swarm)
+      fastForward(game, 8.5);
     }
     game.setGold(140);
     return;
@@ -55,8 +55,9 @@ export function applyShot(game, params) {
   if (shot === 'late') {
     game.startGame();
     placeSet(game, [
-      [0, 'spark'], [1, 'frost'], [2, 'spark'], [4, 'thorn'], [5, 'frost'],
-      [6, 'spark'], [7, 'thorn'], [8, 'frost'], [9, 'spark'], [11, 'thorn'],
+      [0, 'spark'], [1, 'frost'], [2, 'volt'], [4, 'thorn'], [5, 'frost'],
+      [6, 'dawn'], [7, 'thorn'], [8, 'volt'], [9, 'spark'], [11, 'thorn'],
+      [13, 'dawn'],
     ]);
     // Walk through waves 1-7 quickly by clearing them with a strong board.
     for (let w = 1; w <= 7; w++) {
@@ -66,7 +67,7 @@ export function applyShot(game, params) {
       if (game.state === 'victory' || game.state === 'defeat') break;
     }
     if (game.state === 'build') {
-      game.startWave(); // wave 8 in progress
+      game.startWave(); // wave 8 in progress: Wraiths, Wisps, Shades, elites
       fastForward(game, 9);
     }
     game.setGold(230);
@@ -76,9 +77,9 @@ export function applyShot(game, params) {
   if (shot === 'end') {
     game.startGame();
     placeSet(game, [
-      [0, 'spark'], [1, 'frost'], [2, 'spark'], [3, 'thorn'], [4, 'spark'],
-      [5, 'frost'], [6, 'thorn'], [7, 'spark'], [8, 'frost'], [9, 'thorn'],
-      [10, 'spark'], [11, 'frost'], [12, 'thorn'],
+      [0, 'spark'], [1, 'frost'], [2, 'volt'], [3, 'thorn'], [4, 'dawn'],
+      [5, 'frost'], [6, 'thorn'], [7, 'dawn'], [8, 'volt'], [9, 'spark'],
+      [10, 'thorn'], [11, 'frost'], [12, 'spark'], [13, 'volt'], [14, 'dawn'],
     ]);
     // Max the board out, then play every wave to the end.
     for (const tower of [...game.towers]) {

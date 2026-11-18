@@ -31,6 +31,7 @@ const hud = {
   kills: el('hud-kills'),
   waveBtn: el('btn-wave'),
   beginBtn: el('btn-begin'),
+  surgeBtn: el('btn-surge'),
   speedBtn: el('btn-speed'),
   pauseBtn: el('btn-pause'),
   muteBtn: el('btn-mute'),
@@ -44,6 +45,8 @@ function syncHud() {
   const json = JSON.stringify([
     h.gold, h.lives, h.score, h.wave, h.kills, h.state, h.paused, h.speed,
     h.enemiesLeft, h.selectedPlot, h.selectedTower ? h.selectedTower.id : -1,
+    h.surgeLeft, h.selectedTower ? h.selectedTower.mode : '',
+    h.selectedTower ? h.selectedTower.level : 0,
   ]);
   if (json === lastHudJson) return;
   lastHudJson = json;
@@ -57,6 +60,12 @@ function syncHud() {
   hud.waveBtn.textContent = h.state === 'build'
     ? (h.wave === 0 ? '▶ Start Wave 1' : `▶ Start Wave ${h.wave + 1}`)
     : h.state === 'wave' ? `Wave ${h.wave} — ${h.enemiesLeft} left` : '—';
+  hud.surgeBtn.style.display = (h.state === 'build' || h.state === 'wave') ? '' : 'none';
+  hud.surgeBtn.disabled = h.state !== 'wave' || h.surgeLeft <= 0 || h.enemiesLeft === 0;
+  hud.surgeBtn.textContent = h.surgeLeft > 0
+    ? `🔥 Ember Surge — ${h.surgeDamage} dmg (Q)`
+    : '🔥 Surge spent';
+  hud.surgeBtn.classList.toggle('ready', h.state === 'wave' && h.surgeLeft > 0 && h.enemiesLeft > 0);
   hud.beginBtn.style.display = (h.state === 'title' || h.state === 'victory' || h.state === 'defeat') ? '' : 'none';
   hud.beginBtn.textContent = h.state === 'title' ? 'Begin the Watch' : 'Play Again';
   hud.speedBtn.textContent = `Speed ${h.speed}×`;
@@ -75,7 +84,7 @@ function towerCard(key) {
     <span class="tname">${def.name}</span>
     <span class="tcost">🪙 ${def.cost}</span>
     <span class="tdesc">${def.desc}</span>
-    <span class="tstats">DMG ${s.damage} · ${s.rate}/s · RNG ${s.range}${s.splash ? ` · splash ${s.splash}` : ''}${s.slowPct ? ` · slow ${Math.round(s.slowPct * 100)}%` : ''}</span>`;
+    <span class="tstats">${towerStatLine(s)}</span>`;
   btn.addEventListener('click', () => {
     audio.unlock();
     if (game.selectedPlot >= 0) {
@@ -90,6 +99,14 @@ function towerCard(key) {
   return btn;
 }
 
+function towerStatLine(s) {
+  const parts = [`DMG ${s.damage}`, `${s.rate}/s`, `RNG ${s.range}`];
+  if (s.splash) parts.push(`splash ${s.splash}`);
+  if (s.slowPct) parts.push(`slow ${Math.round(s.slowPct * 100)}%`);
+  if (s.chain) parts.push(`chains ${s.chain}`);
+  return parts.join(' · ');
+}
+
 function renderPanel(h) {
   hud.panel.innerHTML = '';
   const tower = h.selectedTower;
@@ -99,8 +116,13 @@ function renderPanel(h) {
     const div = document.createElement('div');
     div.className = 'panel-block';
     div.innerHTML = `<h3>${def.name} <span class="lvl">Lv ${tower.level}</span></h3>
-      <p class="muted">DMG ${stats.damage} · ${stats.rate}/s · RNG ${stats.range}${stats.splash ? ` · splash ${stats.splash}` : ''}${stats.slowPct ? ` · slow ${Math.round(stats.slowPct * 100)}% for ${stats.slowSecs}s` : ''}</p>
-      <p class="muted">Banished by this warden: ${tower.kills}</p>`;
+      <p class="muted">${towerStatLine(stats)}${stats.slowPct ? ` for ${stats.slowSecs}s` : ''}</p>
+      <p class="muted">Banished by this warden: ${tower.kills} · Hunts: <b>${{ first: 'First', strong: 'Strong', last: 'Last' }[tower.mode] || 'First'}</b></p>`;
+    const modeBtn = document.createElement('button');
+    modeBtn.className = 'action-btn ghost';
+    modeBtn.textContent = '🎯 Target: cycle First → Strong → Last (T)';
+    modeBtn.addEventListener('click', () => { game.cycleSelectedTargetMode(); syncHud(); });
+    div.appendChild(modeBtn);
     if (canUpgrade(tower)) {
       const up = document.createElement('button');
       up.className = 'action-btn';
@@ -145,10 +167,13 @@ function renderPanel(h) {
   help.className = 'muted';
   help.innerHTML = 'Click a stone plot beside the path, then pick a warden.<br><br>'
     + '<b>Controls</b><br>Click plot — select · Click warden — upgrade / sell<br>'
-    + 'Space — start wave · 1/2/3 — build · P — pause · M — mute · Esc — cancel<br><br>'
+    + 'Space — start wave · 1–5 — build · Q — Ember Surge · T — targeting<br>'
+    + 'P — pause · M — mute · Esc — cancel<br><br>'
     + '<b>Tips</b><br>Frost slows fast packs; Thorn bursts clusters;<br>'
-    + 'Spark is cheap and never wastes a shot.<br>'
-    + 'Unspent gold earns a +10% ember tithe (max +30) at each wave clear.';
+    + 'Volt chains through swarms; Dawn snipes Husks and the boss.<br>'
+    + 'Elites (★, from wave 4) pay double bounty.<br>'
+    + 'Unspent gold earns a +10% ember tithe (max +30) at each wave clear.<br>'
+    + 'Ember Surge (Q) strikes every foe once per wave — save it for the boss.';
   div.appendChild(help);
   hud.panel.appendChild(div);
 }
@@ -160,6 +185,9 @@ hud.beginBtn.addEventListener('click', () => {
 });
 hud.waveBtn.addEventListener('click', () => {
   if (game.startWave()) syncHud();
+});
+hud.surgeBtn.addEventListener('click', () => {
+  if (game.useSurge()) syncHud();
 });
 hud.speedBtn.addEventListener('click', () => {
   game.setSpeed(game.speed === 1 ? 2 : 1);
@@ -185,6 +213,14 @@ attachInput(canvas, game, {
   },
   onToggleMute() {
     audio.setMuted(!audio.isMuted());
+    syncHud();
+  },
+  onSurge() {
+    game.useSurge();
+    syncHud();
+  },
+  onCycleTarget() {
+    game.cycleSelectedTargetMode();
     syncHud();
   },
   onSelectionChange() { syncHud(); },

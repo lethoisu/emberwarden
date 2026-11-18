@@ -45,13 +45,17 @@ export function attachInput(canvas, game, hooks) {
     } else if (k === 'p') {
       game.togglePause();
       hooks.onSelectionChange();
+    } else if (k === 'q') {
+      hooks.onSurge();
+    } else if (k === 't') {
+      hooks.onCycleTarget();
     } else if (k === 'm') {
       hooks.onToggleMute();
     } else if (k === 'escape') {
       game.cancelSelection();
       hooks.onSelectionChange();
-    } else if (k === '1' || k === '2' || k === '3') {
-      const keys = ['spark', 'frost', 'thorn'];
+    } else if (['1', '2', '3', '4', '5'].includes(k)) {
+      const keys = ['spark', 'frost', 'thorn', 'volt', 'dawn'];
       const key = keys[Number(k) - 1];
       if (game.selectedPlot >= 0) {
         if (game.buyTower(key)) hooks.onSelectionChange();

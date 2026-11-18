@@ -4,6 +4,7 @@
 // the picture.
 
 import { VIEW_W, VIEW_H, PATH, PLOTS, PLOT_R, TREE, PALETTE, TOWERS } from './config.js';
+import { pathPointAt, PATH_LENGTH } from './map.js';
 import { towerStats } from './towers.js';
 import { createRng } from './random.js';
 
@@ -15,6 +16,23 @@ const STARS = Array.from({ length: 70 }, () => ({
 const FIREFLIES = Array.from({ length: 26 }, () => ({
   x: rng.range(0, VIEW_W), y: rng.range(80, VIEW_H - 40),
   ph: rng.range(0, Math.PI * 2), sp: rng.range(0.2, 0.7), r: rng.range(1.2, 2.4),
+}));
+// Fixed scenery so the grove reads the same every run: pines, grass,
+// stones and drifting clouds, all seeded from the same RNG.
+const PINES = Array.from({ length: 14 }, () => ({
+  x: rng.range(0, VIEW_W), y: rng.range(300, 580),
+  s: rng.range(0.7, 1.4), shade: rng.range(0, 1) > 0.5,
+}));
+const GRASS = Array.from({ length: 60 }, () => ({
+  x: rng.range(0, VIEW_W), y: rng.range(310, 590),
+  h: rng.range(4, 9), lean: rng.range(-2, 2),
+}));
+const STONES = Array.from({ length: 26 }, () => ({
+  t: rng.range(0, 1), off: rng.range(-16, 16), r: rng.range(2, 4.5),
+}));
+const CLOUDS = Array.from({ length: 5 }, () => ({
+  x: rng.range(0, VIEW_W), y: rng.range(18, 90),
+  w: rng.range(70, 150), sp: rng.range(2, 6),
 }));
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -50,6 +68,14 @@ function drawPath(ctx) {
   PATH.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   ctx.stroke();
   ctx.setLineDash([]);
+  // Worn stones scattered along the tread.
+  ctx.fillStyle = 'rgba(214, 196, 232, 0.35)';
+  for (const s of STONES) {
+    const p = pathPointAt(s.t * PATH_LENGTH);
+    ctx.beginPath();
+    ctx.arc(p.x + s.off, p.y + (s.off * 0.4), s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawPlots(ctx, game) {
@@ -127,6 +153,10 @@ function drawTree(ctx, game, time) {
 
 function drawTower(ctx, tower, time) {
   const stats = towerStats(tower.key, tower.level);
+  // Recoil: the whole head kicks back a touch on firing.
+  const recoil = tower.recoil > 0 ? Math.sin((tower.recoil / 0.14) * Math.PI) * 3 : 0;
+  const rx = tower.x - Math.cos(tower.angle) * recoil;
+  const ry = tower.y - Math.sin(tower.angle) * recoil;
   // Range ring when selected or placing.
   // (drawn by caller through game.hover/selected state; see drawRange)
   // Shadow + base.
@@ -149,12 +179,12 @@ function drawTower(ctx, tower, time) {
   ctx.lineWidth = 4;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(tower.x, tower.y - 8);
-  ctx.lineTo(tower.x + Math.cos(tower.angle) * 16, tower.y - 8 + Math.sin(tower.angle) * 16);
+  ctx.moveTo(rx, ry - 8);
+  ctx.lineTo(rx + Math.cos(tower.angle) * 16, ry - 8 + Math.sin(tower.angle) * 16);
   ctx.stroke();
   // Head by type.
-  const hx = tower.x;
-  const hy = tower.y - 10;
+  const hx = rx;
+  const hy = ry - 10;
   if (tower.key === 'spark') {
     ctx.fillStyle = tower.color;
     ctx.beginPath();
@@ -180,6 +210,39 @@ function drawTower(ctx, tower, time) {
     ctx.fillStyle = '#eafcff';
     ctx.beginPath();
     ctx.arc(hx, hy, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (tower.key === 'volt') {
+    // Volt: a crackling yellow bloom — three zigzag petals.
+    ctx.strokeStyle = tower.color;
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < 3; i++) {
+      const a = (i * Math.PI * 2) / 3 + time * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(hx + Math.cos(a) * 6, hy + Math.sin(a) * 6);
+      ctx.lineTo(hx + Math.cos(a + 0.5) * 9, hy + Math.sin(a + 0.5) * 9);
+      ctx.lineTo(hx + Math.cos(a) * 13, hy + Math.sin(a) * 13);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#fffbe0';
+    ctx.beginPath();
+    ctx.arc(hx, hy, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (tower.key === 'dawn') {
+    // Dawnspire: a tall pink lance with a rising sun orb.
+    ctx.strokeStyle = '#ffb7e2';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy + 10);
+    ctx.lineTo(hx, hy - 14);
+    ctx.stroke();
+    const g = ctx.createRadialGradient(hx, hy - 14, 1, hx, hy - 14, 10);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.5, tower.color);
+    g.addColorStop(1, 'rgba(224, 86, 155, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(hx, hy - 14, 10, 0, Math.PI * 2);
     ctx.fill();
   } else {
     // Thorn: spiked seed pod.
@@ -207,6 +270,14 @@ function drawTower(ctx, tower, time) {
     ctx.beginPath();
     ctx.arc(tower.x - 8 + i * 8, tower.y + 24, 2.5, 0, Math.PI * 2);
     ctx.fill();
+  }
+  // Max level: a gold crown ring so a Lv 3 warden reads at a glance.
+  if (tower.level >= 3) {
+    ctx.strokeStyle = 'rgba(255, 209, 102, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(tower.x, tower.y, 22, 0, Math.PI * 2);
+    ctx.stroke();
   }
   // Muzzle flash.
   if (tower.flash > 0) {
@@ -295,6 +366,51 @@ function drawEnemy(ctx, e, time) {
     ctx.arc(e.x - 4, y - 2, 2, 0, Math.PI * 2);
     ctx.arc(e.x + 4, y - 2, 2, 0, Math.PI * 2);
     ctx.fill();
+  } else if (e.key === 'swarm') {
+    // Emberling: a tiny buzzing spark with fluttering wings.
+    ctx.fillStyle = e.color;
+    ctx.beginPath();
+    ctx.arc(e.x, y, e.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 240, 200, 0.9)';
+    ctx.lineWidth = 1.5;
+    const flap = Math.sin(time * 18 + e.id) * 4;
+    ctx.beginPath();
+    ctx.moveTo(e.x - 2, y - 2);
+    ctx.lineTo(e.x - 8, y - 6 - flap);
+    ctx.moveTo(e.x + 2, y - 2);
+    ctx.lineTo(e.x + 8, y - 6 - flap);
+    ctx.stroke();
+    ctx.fillStyle = '#1c2438';
+    ctx.beginPath();
+    ctx.arc(e.x - 2, y - 1, 1.5, 0, Math.PI * 2);
+    ctx.arc(e.x + 2, y - 1, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (e.key === 'wraith') {
+    // Wraith: a pale, translucent shroud that slowly knits itself whole.
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = e.color;
+    ctx.beginPath();
+    ctx.moveTo(e.x, y - e.radius - 6);
+    ctx.quadraticCurveTo(e.x + e.radius + 4, y - 4, e.x + e.radius - 2, y + e.radius);
+    ctx.lineTo(e.x + 5, y + e.radius - 5);
+    ctx.lineTo(e.x, y + e.radius + 2);
+    ctx.lineTo(e.x - 5, y + e.radius - 5);
+    ctx.lineTo(e.x - e.radius + 2, y + e.radius);
+    ctx.quadraticCurveTo(e.x - e.radius - 4, y - 4, e.x, y - e.radius - 6);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0e2b22';
+    ctx.beginPath();
+    ctx.arc(e.x - 4, y - 3, 2.5, 0, Math.PI * 2);
+    ctx.arc(e.x + 4, y - 3, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Regen shimmer: a soft green ring that pulses as it heals.
+    ctx.strokeStyle = `rgba(125, 255, 176, ${0.25 + Math.sin(time * 4 + e.id) * 0.15})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(e.x, y, e.radius + 4, 0, Math.PI * 2);
+    ctx.stroke();
   } else {
     // Matriarch: crowned orb.
     const g = ctx.createRadialGradient(e.x - 6, y - 8, 2, e.x, y, e.radius + 4);
@@ -318,6 +434,30 @@ function drawEnemy(ctx, e, time) {
     ctx.arc(e.x - 8, y - 4, 3, 0, Math.PI * 2);
     ctx.arc(e.x + 8, y - 4, 3, 0, Math.PI * 2);
     ctx.fill();
+    // Enraged Matriarch: her crown burns red below half health.
+    if (e.key === 'matriarch' && e.enrageBelow > 0 && e.hp < e.maxHp * e.enrageBelow) {
+      ctx.fillStyle = '#ff5d3c';
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(e.x + i * 9 - 4, y - e.radius + 2);
+        ctx.lineTo(e.x + i * 9, y - e.radius - 14 - Math.sin(time * 9 + i) * 2);
+        ctx.lineTo(e.x + i * 9 + 4, y - e.radius + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+  // Elite ring: gold, so the double-bounty foe is obvious.
+  if (e.elite) {
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(e.x, y, e.radius + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('★', e.x, y - e.radius - 9);
   }
   // Slow tint.
   if (e.slowUntil > 0 && time < e.slowUntil) {
@@ -379,11 +519,68 @@ export function drawGame(ctx, game, time) {
   ctx.lineTo(0, 0);
   ctx.closePath();
   ctx.fill();
+  // Moon with a soft halo, top right — drawn after the hills so it sits
+  // in the sky above the ridge, not behind it.
+  const moonGrad = ctx.createRadialGradient(830, 62, 6, 830, 62, 70);
+  moonGrad.addColorStop(0, 'rgba(255, 244, 214, 0.9)');
+  moonGrad.addColorStop(0.35, 'rgba(255, 244, 214, 0.25)');
+  moonGrad.addColorStop(1, 'rgba(255, 244, 214, 0)');
+  ctx.fillStyle = moonGrad;
+  ctx.beginPath();
+  ctx.arc(830, 62, 70, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff4d6';
+  ctx.beginPath();
+  ctx.arc(830, 62, 24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(214, 196, 160, 0.6)';
+  ctx.beginPath();
+  ctx.arc(822, 56, 5, 0, Math.PI * 2);
+  ctx.arc(838, 68, 3.5, 0, Math.PI * 2);
+  ctx.arc(834, 52, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  // Drifting clouds.
+  ctx.fillStyle = 'rgba(180, 164, 220, 0.16)';
+  for (const c of CLOUDS) {
+    const cx = ((c.x + time * c.sp) % (VIEW_W + 180)) - 90;
+    ctx.beginPath();
+    ctx.ellipse(cx, c.y, c.w / 2, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + 22, c.y + 5, c.w / 3, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   // Ground.
   ctx.fillStyle = PALETTE.ground;
   ctx.fillRect(0, 300, VIEW_W, VIEW_H - 300);
   ctx.fillStyle = PALETTE.groundAlt;
   ctx.fillRect(0, 300, VIEW_W, 4);
+  // Pine silhouettes along the bottom edge, behind the path.
+  for (const p of PINES) {
+    ctx.fillStyle = p.shade ? '#17102c' : '#1b1338';
+    const s = p.s;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - 46 * s);
+    ctx.lineTo(p.x - 13 * s, p.y);
+    ctx.lineTo(p.x + 13 * s, p.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - 62 * s);
+    ctx.lineTo(p.x - 9 * s, p.y - 22 * s);
+    ctx.lineTo(p.x + 9 * s, p.y - 22 * s);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Grass tufts.
+  ctx.strokeStyle = 'rgba(125, 255, 176, 0.28)';
+  ctx.lineWidth = 1.2;
+  for (const g of GRASS) {
+    ctx.beginPath();
+    ctx.moveTo(g.x, g.y);
+    ctx.lineTo(g.x + g.lean, g.y - g.h);
+    ctx.stroke();
+  }
   // Fireflies.
   for (const f of FIREFLIES) {
     const fx = f.x + Math.sin(time * f.sp + f.ph) * 18;
@@ -438,6 +635,58 @@ export function drawGame(ctx, game, time) {
   game.effects.draw(ctx);
   ctx.restore();
 
+  // Ember Surge flash: a dawn wash over the whole scene.
+  const flashA = game.effects.flashAlpha();
+  if (flashA > 0) {
+    ctx.fillStyle = `rgba(255, 226, 150, ${flashA})`;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+  // Low lives: a pulsing red vignette at the edges.
+  if ((game.state === 'build' || game.state === 'wave') && game.lives <= 5) {
+    const pulse = 0.10 + Math.sin(time * 4) * 0.05;
+    const vig = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, 240, VIEW_W / 2, VIEW_H / 2, 560);
+    vig.addColorStop(0, 'rgba(255, 60, 60, 0)');
+    vig.addColorStop(1, `rgba(255, 60, 60, ${pulse})`);
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+  // Boss health bar, top centre, while the Matriarch lives.
+  const boss = game.boss;
+  if (boss) {
+    const w = 340;
+    const x = (VIEW_W - w) / 2;
+    const y = 14;
+    const frac = Math.max(0, boss.hp / boss.maxHp);
+    const enraged = boss.enrageBelow > 0 && frac < boss.enrageBelow;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = enraged ? '#ff8a6b' : '#e9d5ff';
+    ctx.fillText(enraged ? '👑 GLOOM MATRIARCH — ENRAGED!' : '👑 GLOOM MATRIARCH', VIEW_W / 2, y + 11);
+    ctx.fillStyle = 'rgba(10, 6, 24, 0.8)';
+    roundRect(ctx, x, y + 16, w, 12, 6);
+    ctx.fill();
+    ctx.fillStyle = enraged ? '#ff5d3c' : '#b06cff';
+    roundRect(ctx, x + 1, y + 17, (w - 2) * frac, 10, 5);
+    ctx.fill();
+    ctx.strokeStyle = '#e9d5ff';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, x, y + 16, w, 12, 6);
+    ctx.stroke();
+  }
+  // Wave progress: a thin bar, top left, with its label beside it.
+  if (game.state === 'wave') {
+    const total = game.waveTotal || 1;
+    const frac = Math.max(0, Math.min(1, 1 - game.enemiesLeft / total));
+    ctx.fillStyle = 'rgba(10, 6, 24, 0.7)';
+    ctx.fillRect(20, 12, 140, 6);
+    ctx.fillStyle = '#7dffb0';
+    ctx.fillRect(20, 12, 140 * frac, 6);
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#e6dcff';
+    ctx.fillText(`Wave ${game.wave} — ${game.enemiesLeft} foes left`, 170, 19);
+  }
+
   // Banner.
   const banner = game.banner;
   if (banner && game.state !== 'victory' && game.state !== 'defeat') {
@@ -481,21 +730,50 @@ export function drawGame(ctx, game, time) {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     ctx.font = 'bold 64px Georgia, serif';
     ctx.fillStyle = '#ffd166';
-    ctx.fillText('EMBERWARDEN', VIEW_W / 2, 190);
+    ctx.fillText('EMBERWARDEN', VIEW_W / 2, 168);
     ctx.font = 'italic 20px Georgia, serif';
     ctx.fillStyle = '#e6dcff';
-    ctx.fillText('Defend the last Ember Tree from the Gloom', VIEW_W / 2, 226);
+    ctx.fillText('Defend the last Ember Tree from the Gloom', VIEW_W / 2, 202);
     ctx.font = '15px system-ui, sans-serif';
     ctx.fillStyle = '#c9bfe8';
     const lines = [
       'The Gloom walks the winding path to your tree. Build wardens on the stone plots.',
-      'Spark burns fast · Frost slows the swift · Thorn bursts whole clusters.',
       'Earn gold for every creature you banish. Survive all 10 waves — the Matriarch comes last.',
     ];
-    lines.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 288 + i * 26));
+    lines.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 248 + i * 26));
+    // The roster: all five wardens, so the title shows the game's variety.
+    const roster = [
+      ['Spark', '#ffb347', 'fast · cheap'],
+      ['Frost', '#7fe7ff', 'slows the swift'],
+      ['Thorn', '#b8ff7a', 'splash clusters'],
+      ['Volt', '#ffe14d', 'chain lightning'],
+      ['Dawn', '#ff9de2', 'boss killer'],
+    ];
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    roster.forEach((r, i) => {
+      const x = 200 + i * 140;
+      const y = 322;
+      ctx.fillStyle = r[1];
+      ctx.beginPath();
+      ctx.arc(x, y, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#f4efff';
+      ctx.fillText(r[0], x, y + 26);
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillStyle = '#b9aed6';
+      ctx.fillText(r[2], x, y + 44);
+      ctx.font = 'bold 13px system-ui, sans-serif';
+    });
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('5 wardens  ·  7 foes  ·  elite hunts  ·  Ember Surge  ·  10 waves  ·  1 boss', VIEW_W / 2, 402);
+    const best = game.bestScore > 0 ? `Best score: ${game.bestScore}   •   ` : '';
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillStyle = '#b9aed6';
+    ctx.fillText(`${best}Click a plot, build a warden, press SPACE to start the wave.`, VIEW_W / 2, 432);
     ctx.font = 'bold 17px system-ui, sans-serif';
     ctx.fillStyle = 0.6 + Math.sin(time * 3) * 0.4 > 0.7 ? '#ffe9b8' : '#b9aed6';
-    ctx.fillText('Press ENTER or click BEGIN THE WATCH above', VIEW_W / 2, 420);
+    ctx.fillText('Press ENTER or click BEGIN THE WATCH above', VIEW_W / 2, 470);
   }
 
   // Victory / defeat screens.
@@ -506,20 +784,29 @@ export function drawGame(ctx, game, time) {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     const panel = drawOverlayPanel(
       ctx,
-      ['', '', '', '', ''],
+      ['', '', '', '', '', ''],
       win ? '#ffd166' : '#ff6b6b',
     );
     ctx.textAlign = 'center';
     ctx.font = 'bold 44px Georgia, serif';
     ctx.fillStyle = win ? '#ffd166' : '#ff6b6b';
     ctx.fillText(win ? 'THE GROVE IS SAFE!' : 'THE EMBER FADES…', VIEW_W / 2, panel.y + 58);
+    // Victory stars: 3 for 15+ lives, 2 for 8+, else 1 — the run's grade.
+    if (win) {
+      const stars = stats.stars || 1;
+      ctx.font = 'bold 34px system-ui, sans-serif';
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = i < stars ? '#ffd166' : 'rgba(185, 174, 214, 0.35)';
+        ctx.fillText('★', VIEW_W / 2 - 44 + i * 44, panel.y + 100);
+      }
+    }
     ctx.font = '16px system-ui, sans-serif';
     ctx.fillStyle = '#e6dcff';
     const rows = win
       ? [
           `Final score: ${stats.score}  •  Waves cleared: ${stats.waves} / 10`,
-          `Creatures banished: ${stats.kills}  •  Wardens built: ${stats.placed}`,
-          `Leaks: ${stats.leaked}  •  Lives remaining: ${stats.livesLeft}`,
+          `Creatures banished: ${stats.kills}  •  Elites banished: ${stats.elites || 0}  •  Surges: ${stats.surges || 0}`,
+          `Wardens built: ${stats.placed}  •  Leaks: ${stats.leaked}  •  Lives remaining: ${stats.livesLeft}`,
           `Victory bonus +${1000} included. The tree burns on.`,
         ]
       : [
@@ -528,7 +815,7 @@ export function drawGame(ctx, game, time) {
           `The Gloom reached the tree ${stats.leaked} time${stats.leaked === 1 ? '' : 's'}.`,
           'Rebuild, rethink the placement — and try again.',
         ];
-    rows.forEach((r, i) => ctx.fillText(r, VIEW_W / 2, panel.y + 96 + i * 26));
+    rows.forEach((r, i) => ctx.fillText(r, VIEW_W / 2, panel.y + (win ? 132 : 96) + i * 26));
     ctx.font = 'bold 17px system-ui, sans-serif';
     ctx.fillStyle = 0.6 + Math.sin(time * 3) * 0.4 > 0.7 ? '#ffe9b8' : '#b9aed6';
     ctx.fillText('Press R or click PLAY AGAIN above', VIEW_W / 2, panel.y + panel.h - 18);

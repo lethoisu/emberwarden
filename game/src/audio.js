@@ -89,6 +89,15 @@ export function createAudio() {
       tone(196, 0.5, 'sawtooth', 0.12, 262);
       tone(294, 0.5, 'sawtooth', 0.08, 392, 0.05);
     },
+    surge() {
+      [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.22, 'sine', 0.13, 0, i * 0.05));
+      noise(0.25, 0.1, 4000);
+    },
+    bossRoar() {
+      tone(98, 0.7, 'sawtooth', 0.16, 49);
+      tone(147, 0.7, 'sawtooth', 0.1, 73, 0.08);
+      noise(0.5, 0.1, 300);
+    },
     waveClear() { tone(659, 0.12, 'sine', 0.12); tone(880, 0.2, 'sine', 0.12, 0, 0.1); },
     victory() {
       [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.28, 'sine', 0.14, 0, i * 0.13));

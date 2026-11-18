@@ -5,10 +5,12 @@
 import {
   START_GOLD, START_LIVES, WAVE_CLEAR_BASE, WAVE_CLEAR_PER_WAVE,
   TITHE_RATE, TITHE_CAP, SCORE_PER_GOLD, VICTORY_BONUS, TOWERS,
+  STAR_LIVES,
 } from './config.js';
 import { createRng } from './random.js';
 import { makeEnemy, buildSpawnQueue, waveCount, stepEnemy, applySlow } from './enemies.js';
-import { makeTower, towerStats, acquireTarget, fireTower, applyUpgrade, sellValue, canUpgrade, upgradeCost } from './towers.js';
+import { makeTower, towerStats, acquireTarget, fireTower, applyUpgrade, sellValue, canUpgrade, upgradeCost, cycleTargetMode } from './towers.js';
+import { applySurge, surgeUsesPerWave, surgeDamage } from './surge.js';
 import { plotAt, PATH_LENGTH } from './map.js';
 
 export function createGame(deps) {
@@ -28,6 +30,7 @@ export function createGame(deps) {
     projectiles: [],
     spawnQueue: [],
     spawnTimer: 0,
+    waveTotal: 0,
     selectedPlot: -1,
     selectedTowerId: -1,
     placing: null,
@@ -36,11 +39,21 @@ export function createGame(deps) {
     paused: false,
     speed: 1,
     banner: null,
-    stats: { placed: 0, upgraded: 0, sold: 0, leaked: 0, earned: 0 },
+    stats: { placed: 0, upgraded: 0, sold: 0, leaked: 0, earned: 0, surges: 0, elites: 0 },
     treeFlash: 0,
+    surgeLeft: surgeUsesPerWave(),
+    surgeFlash: 0,
     victoryStats: null,
     defeatStats: null,
+    bestScore: 0,
   };
+
+  // Best score persists in the browser only; the Node sim has no storage.
+  try {
+    if (typeof localStorage !== 'undefined') {
+      game.bestScore = Number(localStorage.getItem('emberwarden-best') || 0) || 0;
+    }
+  } catch { /* private mode: no best score, game still plays */ }
 
   function showBanner(title, sub, secs = 2.2) {
     game.banner = { title, sub, until: game.time + secs };
@@ -61,14 +74,17 @@ export function createGame(deps) {
     game.enemies = [];
     game.projectiles = [];
     game.spawnQueue = [];
+    game.waveTotal = 0;
     game.selectedPlot = -1;
     game.selectedTowerId = -1;
     game.placing = null;
     game.paused = false;
     game.speed = 1;
     game.banner = null;
-    game.stats = { placed: 0, upgraded: 0, sold: 0, leaked: 0, earned: 0 };
+    game.stats = { placed: 0, upgraded: 0, sold: 0, leaked: 0, earned: 0, surges: 0, elites: 0 };
     game.treeFlash = 0;
+    game.surgeLeft = surgeUsesPerWave();
+    game.surgeFlash = 0;
     game.victoryStats = null;
     game.defeatStats = null;
   }
@@ -87,12 +103,15 @@ export function createGame(deps) {
     if (game.wave >= waveCount()) return false;
     game.wave += 1;
     game.spawnQueue = buildSpawnQueue(game.wave - 1, rng);
+    game.waveTotal = game.spawnQueue.length;
     game.spawnTimer = 0;
+    game.surgeLeft = surgeUsesPerWave();
     game.state = 'wave';
     game.selectedPlot = -1;
     game.selectedTowerId = -1;
     game.placing = null;
     audio.horn();
+    if (game.wave === waveCount()) audio.bossRoar();
     const names = { 10: 'The Gloom Matriarch comes' };
     showBanner(`Wave ${game.wave} of ${waveCount()}`, names[game.wave] || 'The Gloom stirs in the cave…');
     return true;
@@ -155,6 +174,32 @@ export function createGame(deps) {
     return true;
   }
 
+  // Ember Surge: one dawnlight burst per wave, free, timed by the player.
+  function useSurge() {
+    if (game.state !== 'wave' || game.surgeLeft <= 0) return false;
+    if (game.enemies.length === 0) return false;
+    game.surgeLeft -= 1;
+    game.stats.surges += 1;
+    game.surgeFlash = 0.6;
+    const struck = applySurge(game.enemies, game.wave, damageEnemy);
+    effects.surgeFlash();
+    effects.text(480, 150, `EMBER SURGE! ${struck} struck`, '#ffe9b8', true);
+    audio.surge();
+    return true;
+  }
+
+  function cycleSelectedTargetMode() {
+    const tower = selectedTower();
+    if (!tower) return null;
+    return cycleTargetMode(tower);
+  }
+
+  function victoryStars() {
+    if (game.lives >= STAR_LIVES.three) return 3;
+    if (game.lives >= STAR_LIVES.two) return 2;
+    return 1;
+  }
+
   function clickAt(x, y) {
     if (game.state === 'title' || game.state === 'victory' || game.state === 'defeat') return;
     // A tower first (towers sit on plots, so check them before the plot).
@@ -188,6 +233,12 @@ export function createGame(deps) {
     if (game.wave >= waveCount()) {
       game.score += VICTORY_BONUS;
       game.state = 'victory';
+      if (game.score > game.bestScore) {
+        game.bestScore = game.score;
+        try {
+          if (typeof localStorage !== 'undefined') localStorage.setItem('emberwarden-best', String(game.bestScore));
+        } catch { /* ignore */ }
+      }
       game.victoryStats = {
         score: game.score,
         kills: game.kills,
@@ -195,6 +246,9 @@ export function createGame(deps) {
         placed: game.stats.placed,
         leaked: game.stats.leaked,
         livesLeft: game.lives,
+        stars: victoryStars(),
+        surges: game.stats.surges,
+        elites: game.stats.elites,
       };
       audio.victory();
       showBanner('The grove is safe!', '', 4);
@@ -213,9 +267,11 @@ export function createGame(deps) {
     game.gold += e.bounty;
     game.score += e.bounty * SCORE_PER_GOLD;
     game.kills += 1;
+    if (e.elite) game.stats.elites += 1;
     game.stats.earned += e.bounty;
     effects.poof(e.x, e.y, e.color);
-    effects.text(e.x, e.y - 14, `+${e.bounty}`, '#ffd166');
+    if (e.elite) effects.text(e.x, e.y - 26, `ELITE +${e.bounty}`, '#ffd166', true);
+    else effects.text(e.x, e.y - 14, `+${e.bounty}`, '#ffd166');
     audio.pop();
   }
 
@@ -269,6 +325,27 @@ export function createGame(deps) {
                 damageEnemy(e, p.damage);
               }
             }
+          } else if (p.chain > 0) {
+            // Volt Bloom: the bolt arcs to the nearest foes, each arc
+            // weaker than the last.
+            effects.bolt(p.x, p.y, tx, ty, p.color);
+            damageEnemy(target, p.damage);
+            let from = target;
+            let dmg = p.damage;
+            for (let c = 0; c < p.chain; c++) {
+              dmg = Math.round(dmg * 0.6);
+              let next = null;
+              let nextD = 95;
+              for (const e of game.enemies) {
+                if (e.dead || e.leaked || e === from) continue;
+                const dd = Math.hypot(e.x - from.x, e.y - from.y);
+                if (dd < nextD) { next = e; nextD = dd; }
+              }
+              if (!next) break;
+              effects.bolt(from.x, from.y, next.x, next.y, p.color);
+              damageEnemy(next, dmg);
+              from = next;
+            }
           } else {
             effects.spark(tx, ty, p.color);
             damageEnemy(target, p.damage);
@@ -291,8 +368,10 @@ export function createGame(deps) {
     if (game.paused) return;
     game.time += dt;
     if (game.treeFlash > 0) game.treeFlash -= dt;
+    if (game.surgeFlash > 0) game.surgeFlash -= dt;
     for (const t of game.towers) {
       if (t.flash > 0) t.flash -= dt;
+      if (t.recoil > 0) t.recoil -= dt;
     }
     effects.update(dt);
 
@@ -309,7 +388,7 @@ export function createGame(deps) {
       game.spawnTimer += dt;
       while (game.spawnQueue.length > 0 && game.spawnQueue[0].at <= game.spawnTimer) {
         const spawn = game.spawnQueue.shift();
-        game.enemies.push(makeEnemy(spawn.key, game.wave, rng));
+        game.enemies.push(makeEnemy(spawn.key, game.wave, rng, spawn.elite));
       }
     }
 
@@ -360,6 +439,10 @@ export function createGame(deps) {
       selectedTower: selectedTower(),
       placing: game.placing,
       banner: game.banner && game.time < game.banner.until ? game.banner : null,
+      surgeLeft: game.surgeLeft,
+      surgeDamage: surgeDamage(Math.max(1, game.wave)),
+      boss: game.enemies.find((e) => e.key === 'matriarch' && !e.dead && !e.leaked) || null,
+      totalEnemies: game.enemies.length + game.spawnQueue.length,
     };
   }
 
@@ -387,17 +470,25 @@ export function createGame(deps) {
     get speed() { return game.speed; },
     get banner() { return game.banner && game.time < game.banner.until ? game.banner : null; },
     get treeFlash() { return game.treeFlash; },
+    get surgeLeft() { return game.surgeLeft; },
+    get surgeFlash() { return game.surgeFlash; },
+    get boss() { return game.enemies.find((e) => e.key === 'matriarch' && !e.dead && !e.leaked) || null; },
     get effects() { return effects; },
     get stats() { return game.stats; },
     get victoryStats() { return game.victoryStats; },
     get defeatStats() { return game.defeatStats; },
+    get bestScore() { return game.bestScore; },
     get enemiesLeft() { return game.enemies.length + game.spawnQueue.length; },
+    get waveTotal() { return game.waveTotal; },
 
     startGame,
     startWave,
     buyTower,
     upgradeSelected,
     sellSelected,
+    useSurge,
+    cycleSelectedTargetMode,
+    victoryStars,
     clickAt,
     plotOccupied,
     selectedTower,

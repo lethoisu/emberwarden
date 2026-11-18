@@ -4,6 +4,9 @@
 
 import { TOWERS, SELL_RATE } from './config.js';
 import { plotCenter } from './map.js';
+import { pickTarget, nextTargetMode, TARGET_LABELS } from './targeting.js';
+
+export { TARGET_LABELS };
 
 let nextId = 1;
 
@@ -31,6 +34,8 @@ export function makeTower(key, plotIndex) {
     cooldown: 0,
     angle: -Math.PI / 2,
     flash: 0,
+    recoil: 0,
+    mode: 'first',
     kills: 0,
   };
 }
@@ -57,20 +62,21 @@ export function applyUpgrade(tower) {
   return cost;
 }
 
-// Pick the target: furthest along the path among enemies in range.
+export function cycleTargetMode(tower) {
+  tower.mode = nextTargetMode(tower.mode || 'first');
+  return tower.mode;
+}
+
+// Pick the target: in-range enemies first, then the warden's priority.
 export function acquireTarget(tower, enemies) {
   const stats = towerStats(tower.key, tower.level);
-  let best = null;
-  let bestDist = -1;
+  const inRange = [];
   for (const e of enemies) {
     if (e.dead || e.leaked) continue;
     const d = Math.hypot(e.x - tower.x, e.y - tower.y);
-    if (d <= stats.range + e.radius && e.dist > bestDist) {
-      best = e;
-      bestDist = e.dist;
-    }
+    if (d <= stats.range + e.radius) inRange.push(e);
   }
-  return best;
+  return pickTarget(tower.mode || 'first', inRange);
 }
 
 // One firing step. Returns a projectile description or null.
@@ -82,6 +88,7 @@ export function fireTower(tower, target, dt) {
   tower.cooldown = 1 / stats.rate;
   tower.angle = Math.atan2(target.y - tower.y, target.x - tower.x);
   tower.flash = 0.12;
+  tower.recoil = 0.14;
   return {
     kind: tower.key,
     x: tower.x,
@@ -91,8 +98,9 @@ export function fireTower(tower, target, dt) {
     splash: stats.splash || 0,
     slowPct: stats.slowPct || 0,
     slowSecs: stats.slowSecs || 0,
-    speed: tower.key === 'thorn' ? 260 : 420,
+    chain: stats.chain || 0,
+    speed: tower.key === 'thorn' ? 260 : tower.key === 'dawn' ? 560 : 420,
     color: tower.color,
-    radius: tower.key === 'thorn' ? 7 : 4,
+    radius: tower.key === 'thorn' ? 7 : tower.key === 'dawn' ? 6 : 4,
   };
 }

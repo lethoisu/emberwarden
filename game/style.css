@@ -42,6 +42,9 @@ button:hover:not(:disabled) { background: #3a2e66; }
 button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: #7a4d16; border-color: #b5772a; font-weight: bold; }
 button.primary:hover:not(:disabled) { background: #96601c; }
+button.surge { background: #6b2d8f; border-color: #a86bd6; font-weight: bold; }
+button.surge:hover:not(:disabled) { background: #8339ad; }
+button.surge.ready { box-shadow: 0 0 10px #ffd166; border-color: var(--gold); }
 .layout {
   display: flex; gap: 16px; align-items: flex-start;
   padding: 14px 16px 20px; max-width: 1300px; margin: 0 auto;
